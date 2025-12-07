@@ -1,4 +1,6 @@
 import org.w3c.dom.Element
+import org.ajoberstar.grgit.gradle.GrgitService
+import org.ajoberstar.grgit.Grgit
 
 plugins {
     id("idea")
@@ -26,6 +28,10 @@ tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
 }
 
+// --- NEW: safely grab grgit from the plugin (may be null if no .git dir) ---
+val grgit: Grgit? = project.extensions.findByName("grgit") as? Grgit
+// ---------------------------------------------------------------------------
+
 version = getModVersion()
 group = "maven_group"()
 println("Embeddium: $version")
@@ -35,7 +41,7 @@ base {
 }
 
 // Mojang ships Java 17 to end users in 1.18+, so your mod should target Java 17.
-// java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+// java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 val extraSourceSets = arrayOf("legacy", "compat")
 
@@ -141,7 +147,7 @@ dependencies {
 
     // runtime remapping at home
     fileTree(extraModsDir) {
-        include("*.jar") 
+        include("*.jar")
     }.files.forEach { extraModJar ->
         val basename = extraModJar.name.substring(0, extraModJar.name.length - ".jar".length)
         val versionSep = basename.lastIndexOf('-')
@@ -164,7 +170,6 @@ tasks.withType<JavaCompile> {
     options.release = 21
     val compilerArgs = options.compilerArgs
 }
-
 
 java {
     withSourcesJar()
@@ -285,9 +290,14 @@ fun getModVersion(): String {
     }
 
     // Increment patch version
-    baseVersion = baseVersion.split(".").mapIndexed {
-        index, s -> if(index == 2) (s.toInt() + 1) else s
+    baseVersion = baseVersion.split(".").mapIndexed { index, s ->
+        if (index == 2) (s.toInt() + 1).toString() else s
     }.joinToString(separator = ".")
+
+    // If there's no Git repo available, just use the incremented version
+    if (grgit == null) {
+        return baseVersion + mcMetadata
+    }
 
     val head = grgit.head()
     var id = head.abbreviatedId
@@ -297,7 +307,7 @@ fun getModVersion(): String {
         id += "-dirty"
     }
 
-    return baseVersion + "-git-${id}" + mcMetadata
+    return baseVersion + "-git-$id$mcMetadata
 }
 
 // This snippet comes from the ForgeMDK
